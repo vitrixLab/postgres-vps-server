@@ -1,0 +1,7 @@
+
+# Local data and backups
+.db/
+*.bak
+.env
+.env.*
+!.env.example
