@@ -1,14 +1,69 @@
-version: "3.9"
+version: '3.8'
 
 services:
-  db:
-    build: .
-    env_file: .env
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
+  postgres:
+    image: postgres:17
+    container_name: postgres-db
     restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/db_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_DB: appdb
+    secrets:
+      - db_user
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/17/docker
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: "2G"
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    container_name: pgbouncer-pool
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER_FILE: /run/secrets/db_user
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: "20"
+      MAX_CLIENT_CONN: "100"
+    secrets:
+      - db_user
+      - db_password
+    ports:
+      - "127.0.0.1:6433:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
-  pg_data:
+  pgdata:
+
+secrets:
+  db_user:
+    file: ./.db/user
+  db_password:
+    file: ./.db/password
